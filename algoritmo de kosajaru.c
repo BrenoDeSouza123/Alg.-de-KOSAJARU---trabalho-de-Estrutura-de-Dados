@@ -1,24 +1,47 @@
+/*
+ * Trabalho de Grafos
+ * Dupla: BRENO SANTANA E KAYKY BITTENCOURT
+ * Tema: Algoritmo de Kosaraju
+ *
+ * O programa utiliza listas de adjacencia para representar o grafo
+ * e encontra suas componentes fortemente conexas usando o algoritmo
+ * de Kosaraju.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 
+
+/* Representa uma aresta na lista de adjacencia */
 typedef struct Aresta {
     int destino;
     struct Aresta *prox;
 } Aresta;
 
 
+/* Estrutura principal do grafo */
 typedef struct {
-    int n;          
-    Aresta **adj;   
+    int n;
+    Aresta **adj;
 } Grafo;
 
+
+/* Contadores usados para acompanhar a execucao das buscas */
 typedef struct {
     int visitas;
     int arestas_examinadas;
 } Contador;
 
+
+/* Funcao usada no final para liberar toda a memoria do grafo */
 void liberar_grafo(Grafo *g);
 
+
+/*
+ * Cria um grafo com n vertices.
+ * Cada posicao do vetor adj representa a lista de arestas
+ * que saem de um determinado vertice.
+ */
 Grafo *criar_grafo(int n) {
     Grafo *g = malloc(sizeof(Grafo));
 
@@ -35,9 +58,12 @@ Grafo *criar_grafo(int n) {
         free(g);
         exit(EXIT_FAILURE);
     }
+
     return g;
 }
 
+
+/* Adiciona uma aresta direcionada de origem para destino */
 void adicionar_aresta(Grafo *g, int origem, int destino) {
     Aresta *nova = malloc(sizeof(Aresta));
 
@@ -51,6 +77,11 @@ void adicionar_aresta(Grafo *g, int origem, int destino) {
     g->adj[origem] = nova;
 }
 
+
+/*
+ * Cria o grafo transposto.
+ * No transposto, toda aresta u -> v passa a ser v -> u.
+ */
 Grafo *transposto(const Grafo *g) {
     Grafo *t = criar_grafo(g->n);
 
@@ -59,44 +90,98 @@ Grafo *transposto(const Grafo *g) {
             adicionar_aresta(t, e->destino, u);
         }
     }
+
     return t;
 }
 
-void dfs_ordem(const Grafo *g, int u, int *visitado, int *ordem, int *pos, Contador *contador) {
+
+/*
+ * Primeira busca em profundidade do algoritmo.
+ *
+ * O objetivo aqui nao e encontrar as componentes ainda.
+ * Os vertices sao colocados em "ordem" somente depois que
+ * todos os seus vizinhos foram explorados.
+ */
+void dfs_ordem(
+    const Grafo *g,
+    int u,
+    int *visitado,
+    int *ordem,
+    int *pos,
+    Contador *contador
+) {
     visitado[u] = 1;
     contador->visitas++;
 
     for (Aresta *e = g->adj[u]; e != NULL; e = e->prox) {
-     
         contador->arestas_examinadas++;
 
         if (!visitado[e->destino]) {
-            dfs_ordem(g, e->destino, visitado, ordem, pos, contador);
+            dfs_ordem(
+                g,
+                e->destino,
+                visitado,
+                ordem,
+                pos,
+                contador
+            );
         }
     }
+
     ordem[(*pos)++] = u;
 }
 
-void dfs_componente(const Grafo *g, int u, int *visitado, int id_componente, int *componente, Contador *contador) {
+
+/*
+ * Segunda busca em profundidade.
+ *
+ * Esta busca e feita no grafo transposto e seguindo a ordem
+ * encontrada na primeira DFS. Cada nova busca iniciada aqui
+ * corresponde a uma componente fortemente conexa.
+ */
+void dfs_componente(
+    const Grafo *g,
+    int u,
+    int *visitado,
+    int id_componente,
+    int *componente,
+    Contador *contador
+) {
     visitado[u] = 1;
     componente[u] = id_componente;
-
     contador->visitas++;
 
     for (Aresta *e = g->adj[u]; e != NULL; e = e->prox) {
-
         contador->arestas_examinadas++;
 
         if (!visitado[e->destino]) {
-            dfs_componente(g, e->destino, visitado, id_componente, componente, contador);
+            dfs_componente(
+                g,
+                e->destino,
+                visitado,
+                id_componente,
+                componente,
+                contador
+            );
         }
     }
 }
 
 
-int *kosaraju(const Grafo *g, int *num_componentes, Contador *contador) {
-    
+/*
+ * Executa as tres etapas do algoritmo de Kosaraju:
+ *
+ * 1. DFS no grafo original para obter a ordem de termino;
+ * 2. criacao do grafo transposto;
+ * 3. novas DFS no transposto, seguindo a ordem inversa.
+ */
+int *kosaraju(
+    const Grafo *g,
+    int *num_componentes,
+    Contador *contador
+) {
     int n = g->n;
+
     int *visitado = calloc((size_t)n, sizeof(int));
     int *ordem = malloc((size_t)n * sizeof(int));
     int *componente = malloc((size_t)n * sizeof(int));
@@ -114,25 +199,47 @@ int *kosaraju(const Grafo *g, int *num_componentes, Contador *contador) {
     contador->visitas = 0;
     contador->arestas_examinadas = 0;
 
+
+    /* Primeira DFS: determina a ordem de termino dos vertices */
     int pos = 0;
+
     for (int u = 0; u < n; u++) {
         if (!visitado[u]) {
-            dfs_ordem(g, u, visitado, ordem, &pos, contador);
+            dfs_ordem(
+                g,
+                u,
+                visitado,
+                ordem,
+                &pos,
+                contador
+            );
         }
     }
 
+
+    /*
+     * A segunda parte do algoritmo trabalha sobre o grafo
+     * com todas as arestas invertidas.
+     */
+    Grafo *gt = transposto(g);
+
+
+    /* O vetor de visitados precisa ser reutilizado na segunda DFS */
     for (int u = 0; u < n; u++) {
         visitado[u] = 0;
     }
 
+
+    /*
+     * Percorremos a ordem de termino de tras para frente.
+     * Cada DFS que ainda nao foi visitada encontra uma nova CFC.
+     */
     *num_componentes = 0;
 
     for (int i = n - 1; i >= 0; i--) {
-
         int u = ordem[i];
 
         if (!visitado[u]) {
-
             dfs_componente(
                 gt,
                 u,
@@ -146,6 +253,7 @@ int *kosaraju(const Grafo *g, int *num_componentes, Contador *contador) {
         }
     }
 
+
     liberar_grafo(gt);
     free(visitado);
     free(ordem);
@@ -153,8 +261,9 @@ int *kosaraju(const Grafo *g, int *num_componentes, Contador *contador) {
     return componente;
 }
 
-void imprimir_grafo(const Grafo *g) {
 
+/* Mostra a lista de adjacencia do grafo */
+void imprimir_grafo(const Grafo *g) {
     for (int u = 0; u < g->n; u++) {
         printf("  %d: ", u + 1);
 
@@ -165,22 +274,23 @@ void imprimir_grafo(const Grafo *g) {
         }
 
         while (e != NULL) {
-
             printf("%d", e->destino + 1);
+
             if (e->prox != NULL) {
                 printf(" -> ");
             }
 
             e = e->prox;
         }
+
         printf("\n");
     }
 }
 
 
+/* Mostra as arestas usadas para montar cada exemplo */
 void imprimir_arestas(const int arestas[][2], int m) {
     for (int i = 0; i < m; i++) {
-
         printf(
             "  %d -> %d\n",
             arestas[i][0] + 1,
@@ -189,15 +299,21 @@ void imprimir_arestas(const int arestas[][2], int m) {
     }
 }
 
-void imprimir_componentes(const int *componente, int n,int num_componentes) {
+
+/* Mostra as componentes encontradas pelo algoritmo */
+void imprimir_componentes(
+    const int *componente,
+    int n,
+    int num_componentes
+) {
     printf(
         "Componentes fortemente conexas: %d\n",
         num_componentes
     );
 
     for (int c = 0; c < num_componentes; c++) {
-
         printf("  CFC %d: { ", c + 1);
+
         int primeiro = 1;
 
         for (int v = 0; v < n; v++) {
@@ -210,45 +326,87 @@ void imprimir_componentes(const int *componente, int n,int num_componentes) {
                 primeiro = 0;
             }
         }
+
         printf(" }\n");
     }
 }
 
-void executar_exemplo(const char *nome, int n, const int arestas[][2], int m) {
+
+/*
+ * Monta um exemplo, executa o algoritmo e mostra os resultados.
+ */
+void executar_exemplo(
+    const char *nome,
+    int n,
+    const int arestas[][2],
+    int m
+) {
     Grafo *g = criar_grafo(n);
 
     for (int i = 0; i < m; i++) {
-        adicionar_aresta(g, arestas[i][0], arestas[i][1]);
+        adicionar_aresta(
+            g,
+            arestas[i][0],
+            arestas[i][1]
+        );
     }
+
+
     printf("==================================================\n");
     printf("%s\n", nome);
     printf("==================================================\n");
 
-    printf("Entrada:\n");
 
+    /* Entrada do exemplo */
+    printf("Entrada:\n");
     printf("  Vertices: %d\n", n);
     printf("  Arestas: %d\n", m);
 
     imprimir_arestas(arestas, m);
 
-    printf("\nLista de adjacencia:\n");
 
+    /* Representacao utilizada pelo programa */
+    printf("\nLista de adjacencia:\n");
     imprimir_grafo(g);
 
-    Contador contador;
 
+    /* Execucao do algoritmo */
+    Contador contador;
     int num_componentes;
 
-    int *componente = kosaraju(g, &num_componentes, &contador);
+    int *componente = kosaraju(
+        g,
+        &num_componentes,
+        &contador
+    );
 
+
+    /* Resultado */
     printf("\nSaida do algoritmo de Kosaraju:\n");
 
-    imprimir_componentes(componente, n, num_componentes);
+    imprimir_componentes(
+        componente,
+        n,
+        num_componentes
+    );
 
+
+    /*
+     * Os contadores mostram quantos vertices foram visitados
+     * e quantas arestas foram analisadas durante as duas DFS.
+     */
     printf("\nContadores:\n");
-    printf(""  Visitas de vertices nas duas DFS: %d\n", contador.visitas);
 
-    printf("  Arestas examinadas nas duas DFS: %d\n", contador.arestas_examinadas);
+    printf(
+        "  Visitas de vertices nas duas DFS: %d\n",
+        contador.visitas
+    );
+
+    printf(
+        "  Arestas examinadas nas duas DFS: %d\n",
+        contador.arestas_examinadas
+    );
+
 
     free(componente);
     liberar_grafo(g);
@@ -256,17 +414,19 @@ void executar_exemplo(const char *nome, int n, const int arestas[][2], int m) {
     printf("\n");
 }
 
+
+/* Libera as listas de adjacencia e a estrutura do grafo */
 void liberar_grafo(Grafo *g) {
     if (g == NULL) {
         return;
     }
 
     for (int u = 0; u < g->n; u++) {
-
         Aresta *e = g->adj[u];
-        while (e != NULL) {
 
+        while (e != NULL) {
             Aresta *prox = e->prox;
+
             free(e);
             e = prox;
         }
@@ -276,10 +436,21 @@ void liberar_grafo(Grafo *g) {
     free(g);
 }
 
+
 int main(void) {
 
+    /*
+     * Exemplo 1:
+     *
+     * 1 -> 2 -> 3 -> 1
+     *              |
+     *              v
+     *              4 <-> 5 -> 6
+     *
+     * CFCs esperadas:
+     * {1, 2, 3}, {4, 5} e {6}
+     */
     const int arestas1[][2] = {
-
         {0, 1},
         {1, 2},
         {2, 0},
@@ -292,8 +463,16 @@ int main(void) {
         {4, 5}
     };
 
-    const int arestas2[][2] = {
 
+    /*
+     * Exemplo 2:
+     *
+     * 1 <-> 2 -> 3 <-> 4 -> 5
+     *
+     * CFCs esperadas:
+     * {1, 2}, {3, 4} e {5}
+     */
+    const int arestas2[][2] = {
         {0, 1},
         {1, 0},
 
@@ -305,8 +484,22 @@ int main(void) {
         {3, 4}
     };
 
-    executar_exemplo("EXEMPLO 1", 6, arestas1, (int)(sizeof(arestas1) / sizeof(arestas1[0])));
 
-    executar_exemplo("EXEMPLO 2", 5, arestas2, (int)(sizeof(arestas2) / sizeof(arestas2[0])));
+    executar_exemplo(
+        "EXEMPLO 1",
+        6,
+        arestas1,
+        (int)(sizeof(arestas1) / sizeof(arestas1[0]))
+    );
+
+
+    executar_exemplo(
+        "EXEMPLO 2",
+        5,
+        arestas2,
+        (int)(sizeof(arestas2) / sizeof(arestas2[0]))
+    );
+
+
     return 0;
 }
